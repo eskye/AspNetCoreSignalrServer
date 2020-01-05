@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>SignalR Javascript Client</title>
+</head>
+
+<body>
+    <h1>SignalR Javascript Client</h1>
+    <p id="stateLabel"> Ready to connect</p>
+    <p id="connIDLabel"> ConnID: N/a</p>
+
+    <div>
+        <label for="connectionUrl">SignalR Server Url:</label>
+        <input id="connectionUrl"/>
+        <button id="connectButton" type="submit">Connnect</button>
+        <button id="closeButton" disabled>Close Connection</button>
+    
+    </div>
+<p></p>
+<div>
+    <label for="sendMessage">Message:</label>
+    <input id="sendMessage" disabled/>
+    <button id="sendButton" type="submit" disabled>Send</button>
+
+
+</div>
+<p></p>
+<div>
+    <label for="recipents">Recipent ID:</label>
+    <input id="recipents" disabled/>
+    </div>
+<p></p>
+<h2>Communication Log</h2>
+<table style="width: 800px;">
+    <thead>
+        <tr>
+            <td style="width: 100px;">From</td>
+            <td style="width: 100px;">To</td>
+            <td>Data</td>
+        </tr>
+    </thead>
+<tbody id="commsLog">
+
+</tbody>
+</table>
+<p></p>
+<script src="js/dist/browser/signalr.js"></script>
+<script>
+var connectionUrl = document.getElementById('connectionUrl');
+var connectButton = document.getElementById('connectButton');
+var stateLabel = document.getElementById('stateLabel');
+var sendMessage = document.getElementById('sendMessage');
+var sendButton = document.getElementById('sendButton');
+var closeButton = document.getElementById('closeButton');
+var commsLog = document.getElementById('commsLog');
+var recipents = document.getElementById('recipents');
+var connID = document.getElementById('connIDLabel');
+
+connectionUrl.value = 'http://localhost:5000/chatHub';
+let hubConnection = new signalR.HubConnectionBuilder()
+                     .withUrl(connectionUrl.value)
+                     .build()
+
+connectButton.onclick = () =>{
+    stateLabel.innerHTML = "Attempting to connect...";
+       hubConnection.start().then(() =>{
+           updateState();
+           commsLog.innerHTML += '<tr>' +
+           '<td colspan="3"> Connection Opened</td>' +
+           '</tr>';
+       });
+       
+    }; 
+
+closeButton.onclick = () =>{
+  if(!hubConnection || hubConnection.state == 0)
+  {
+     alert("Hub not connected");
+  }
+  hubConnection.stop().then(() =>{
+    console.debug("Requested stop on hub");
+  });
+};
+
+hubConnection.onclose = (event) =>{
+    updateState();
+    commsLog.innerHTML += '<tr>' +
+           '<td colspan="3">Connection Stopped.</td>' +
+           '</tr>';
+}
+sendButton.onclick = () =>{
+    const message = constructJSON();
+    hubConnection.invoke("SendMessageAsync", message) // SendMessageAsync - This is a method that sendmessage declared in C# Chathub Class
+ commsLog.innerHTML += '<tr>' +
+           '<td> Client </td>' +
+           '<td> Server </td>' +
+           '<td>' + htmlEscape(message) +' </td>' +
+           '</tr>';
+           sendMessage.value = "";
+          
+}
+ 
+
+const constructJSON = () =>{
+    return JSON.stringify({
+        "From": connID.innerHTML.substring(8, connID.innerHTML.length),
+        "To": recipents.value,
+        "Message":sendMessage.value
+    })
+}
+
+// ReceivedConnID --- This is an event handler from C#- chathub Class that signalr client connect to to receive Connection ID
+hubConnection.on("ReceivedConnID", (connId) => {
+   connID.innerHTML = "ConnID: " + connId;
+   commsLog.innerHTML += '<tr>' +
+           '<td colspan="3">Connection ID Received from Hub.</td>' +
+           '</tr>';
+});
+// ReceiveMessage --- This is an event handler from C#- chathub Class that signalr client connect to to receive message
+hubConnection.on("ReceiveMessage", (message) =>{
+    commsLog.innerHTML += '<tr>' +
+           '<td> Server </td>' +
+           '<td> Client </td>' +
+           '<td>' + htmlEscape(message) +' </td>' +
+           '</tr>';
+});
+
+const htmlEscape = (str) =>{
+ return str.toString()
+ .replace(/&/g, '&amp;')
+ .replace(/"/g, '&qout;')
+ .replace(/'/g, '&#39;')
+ .replace(/</g, '&lt;')
+ .replace(/>/g, '&gt;')
+}
+
+const updateState = () =>{
+    const disable = () =>{
+        sendMessage.disabled = true;
+        sendButton.disabled = true;
+        closeButton.disabled = true;
+        recipents.disabled = true;  
+    }
+
+    const enable = () =>{
+        sendMessage.disabled = false;
+        sendButton.disabled = false;
+        closeButton.disabled = false;
+        recipents.disabled = false;
+    }
+
+    connectionUrl.disabled = true;
+    connectButton.disabled = true;
+    if(!hubConnection){
+        disable();
+    }else{
+        console.log(hubConnection);
+        switch (hubConnection.state) {
+            case 0:
+                stateLabel.innerHTML = "CLosed";
+                connID.innerHTML = "ConnID: N/a";
+                disable();
+                connectionUrl.disabled = false;
+                connectButton.disabled = false;
+                break;
+           case 1:
+                stateLabel.innerHTML = "Connected"; 
+                enable(); 
+                break; 
+            case "Connecting":
+                stateLabel.innerHTML = "Connecting.."; 
+                disable();
+                break; 
+            default:
+              stateLabel.innerHTML = "Unknown  State- unknow ";
+              disable();
+                break;
+        }
+    }
+}
+</script>
+</body>
+
+</html>
